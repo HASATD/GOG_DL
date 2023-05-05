@@ -29,7 +29,10 @@ def main(args):
     features = torch.from_numpy(features).float().to(args.device)
     sensitive_save = sensitive.copy()
     print(sensitive.shape)
-    
+    print(sensitive)
+    for i in range(50):
+        print(sensitive[i])
+    print(adj.shape)
 
     adj_norm = preprocess_graph(adj).to(args.device)
     adj = sp.coo_matrix(adj + sp.eye(adj.shape[0]))
@@ -56,38 +59,38 @@ def main(args):
     data=dataset[0]
     epochs=101
     delta=0.3
-    Y = torch.LongTensor(sensitive).to(args.device)
+    Y = torch.LongTensor(sensitive)
 
     inter=[]
     intra=[]
-    
-    adj_norm = adj_norm.to_dense()
-    non_zero_indices = torch.nonzero(adj_norm)
-    i_indices, j_indices = non_zero_indices[:,0], non_zero_indices[:,1]
+    for i in range(len(adj_norm)):
+        for j in range(len(adj_norm)):
+            if(Y[i]==Y[j]):
+                intra.append([i,j])
+            else:
+                inter.append([i,j])
 
-    mask = Y[i_indices] == Y[j_indices]
-    intra = torch.stack((i_indices[mask], j_indices[mask]), dim=1)
-    inter = torch.stack((i_indices[~mask], j_indices[~mask]), dim=1)
-    adj_norm=adj_norm.to_sparse()
+    inter = np.array(inter)
+    intra = np.array(intra)
 
     adj_copy_final=copy.deepcopy(adj_norm)
+    adj_copy=copy.deepcopy(adj_copy_final)
+    random_indices = np.random.choice(intra.shape[0], size=int(intra.shape[0]*delta), replace=False)
+    print(random_indices.shape)
+    adj_copy=adj_copy.to_dense()
+
+    for ind in range(len(random_indices)):
+
+        adj_copy[intra[random_indices[ind]][0]][intra[random_indices[ind]][1]]=0
+
+    adj_copy=adj_copy.to_sparse()
+    adj_norm=adj_copy
 ##########################################################################################
 
     # Training
     model.train()
     for i in range(args.outer_epochs):
 
-        adj_copy=copy.deepcopy(adj_copy_final)
-        random_indices = np.random.choice(intra.shape[0], size=int(intra.shape[0]*delta), replace=False)
-        print(random_indices.shape)
-        adj_copy=adj_copy.to_dense()
-
-        for ind in range(len(random_indices)):
-            adj_copy[intra[random_indices[ind]][0]][intra[random_indices[ind]][1]]=0
-            adj_copy[intra[random_indices[ind]][1]][intra[random_indices[ind]][0]]=0
-
-        adj_copy=adj_copy.to_sparse()
-        adj_norm=adj_copy       
 
         for epoch in range(args.T1):
             optimizer.zero_grad()

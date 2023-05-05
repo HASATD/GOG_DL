@@ -19,7 +19,7 @@ def fair_link_eval(
     def sigmoid(x):
         return 1 / (1 + np.exp(-x))
 
-    adj_rec = np.array(np.dot(emb, emb.T), dtype=np.float128)
+    adj_rec = np.array(np.dot(emb, emb.T), dtype=np.float32)
 
     preds_pos_intra = []
     preds_pos_inter = []

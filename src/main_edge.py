@@ -61,7 +61,7 @@ def main(args):
     dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
     data=dataset[0]
     epochs=101
-    delta=0.1
+    delta=0.05
     Y = torch.LongTensor(sensitive).to(args.device)
 
     inter=[]
@@ -78,14 +78,14 @@ def main(args):
 
     adj_copy_final=copy.deepcopy(adj_norm)
     # num_edges is the number of c edges and intra edges
-    num_edges = adj_copy_final._nnz()
+    num_edges = intra.shape[0] + inter.shape[0]
     print("num_edges",num_edges)
     flattened_shape = num_edges*32
     mlp = nn.Sequential(
     nn.Linear(flattened_shape, num_edges),
     nn.ReLU(),
     nn.Linear(num_edges, num_edges)
-    )
+    ).to(args.device)
 
 ##########################################################################################
 
@@ -112,7 +112,8 @@ def main(args):
             
             print("z.shape",z.shape)
             print("recoverd.shape",recovered.shape)
-            edge_indices = np.concatenate((intra, inter), axis=0)
+            # get edge indices by combining intra and inter edges
+            edge_indices = torch.cat((intra, inter), dim=0)
             src_node_embeddings = z[edge_indices[:, 0], :]
             dst_node_embeddings = z[edge_indices[:, 1], :]
             edge_embeddings = torch.cat((src_node_embeddings, dst_node_embeddings), dim=1)

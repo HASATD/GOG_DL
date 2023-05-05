@@ -55,7 +55,7 @@ def main(args):
     dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
     data=dataset[0]
     epochs=101
-    delta=0.3
+    delta=0.08
     Y = torch.LongTensor(sensitive).to(args.device)
 
     inter=[]
@@ -64,7 +64,6 @@ def main(args):
     adj_norm = adj_norm.to_dense()
     non_zero_indices = torch.nonzero(adj_norm)
     i_indices, j_indices = non_zero_indices[:,0], non_zero_indices[:,1]
-
     mask = Y[i_indices] == Y[j_indices]
     intra = torch.stack((i_indices[mask], j_indices[mask]), dim=1)
     inter = torch.stack((i_indices[~mask], j_indices[~mask]), dim=1)
@@ -79,7 +78,7 @@ def main(args):
 
         adj_copy=copy.deepcopy(adj_copy_final)
         random_indices = np.random.choice(intra.shape[0], size=int(intra.shape[0]*delta), replace=False)
-        print(random_indices.shape)
+        print("random indices shape",random_indices.shape)
         adj_copy=adj_copy.to_dense()
 
         for ind in range(len(random_indices)):

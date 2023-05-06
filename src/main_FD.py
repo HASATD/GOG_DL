@@ -29,10 +29,7 @@ def main(args):
     features = torch.from_numpy(features).float().to(args.device)
     sensitive_save = sensitive.copy()
     print(sensitive.shape)
-    print(sensitive)
-    for i in range(50):
-        print(sensitive[i])
-    print(adj.shape)
+    
 
     adj_norm = preprocess_graph(adj).to(args.device)
     adj = sp.coo_matrix(adj + sp.eye(adj.shape[0]))
@@ -58,39 +55,38 @@ def main(args):
     dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
     data=dataset[0]
     epochs=101
-    delta=0.3
-    Y = torch.LongTensor(sensitive)
+    delta=0.08
+    Y = torch.LongTensor(sensitive).to(args.device)
 
     inter=[]
     intra=[]
-    for i in range(len(adj_norm)):
-        for j in range(len(adj_norm)):
-            if(Y[i]==Y[j]):
-                intra.append([i,j])
-            else:
-                inter.append([i,j])
-
-    inter = np.array(inter)
-    intra = np.array(intra)
+    
+    adj_norm = adj_norm.to_dense()
+    non_zero_indices = torch.nonzero(adj_norm)
+    i_indices, j_indices = non_zero_indices[:,0], non_zero_indices[:,1]
+    mask = Y[i_indices] == Y[j_indices]
+    intra = torch.stack((i_indices[mask], j_indices[mask]), dim=1)
+    inter = torch.stack((i_indices[~mask], j_indices[~mask]), dim=1)
+    adj_norm=adj_norm.to_sparse()
 
     adj_copy_final=copy.deepcopy(adj_norm)
-    adj_copy=copy.deepcopy(adj_copy_final)
-    random_indices = np.random.choice(intra.shape[0], size=int(intra.shape[0]*delta), replace=False)
-    print(random_indices.shape)
-    adj_copy=adj_copy.to_dense()
-
-    for ind in range(len(random_indices)):
-
-        adj_copy[intra[random_indices[ind]][0]][intra[random_indices[ind]][1]]=0
-
-    adj_copy=adj_copy.to_sparse()
-    adj_norm=adj_copy
 ##########################################################################################
 
     # Training
     model.train()
     for i in range(args.outer_epochs):
 
+        adj_copy=copy.deepcopy(adj_copy_final)
+        random_indices = np.random.choice(intra.shape[0], size=int(intra.shape[0]*delta), replace=False)
+        print("random indices shape",random_indices.shape)
+        adj_copy=adj_copy.to_dense()
+
+        for ind in range(len(random_indices)):
+            adj_copy[intra[random_indices[ind]][0]][intra[random_indices[ind]][1]]=0
+            adj_copy[intra[random_indices[ind]][1]][intra[random_indices[ind]][0]]=0
+
+        adj_copy=adj_copy.to_sparse()
+        adj_norm=adj_copy       
 
         for epoch in range(args.T1):
             optimizer.zero_grad()
@@ -107,26 +103,8 @@ def main(args):
 
         for epoch in range(args.T2):
             adj_norm = adj_norm.requires_grad_(True)
-            z = model(features, adj_norm)[1]        
-            z = z.transpose(0, 1)
-            z = z[torch.randperm(z.shape[0])]
-            z2 = z
-            z = conv_small(z)
-            z = z.transpose(0, 1)
-            z = F.relu(z)  
-            z = bn_layer(z)
-            z2 = conv_big(z2)
-            z2 = z2.transpose(0, 1)
-            z2 = F.relu(z2)
-            z2 = bn_layer(z2)
-            z = z + z2
-            z = bn_layer(z)
-            z = z.transpose(0, 1)
-            z = z[torch.argsort(torch.arange(z.shape[0]))]
-            z = z.transpose(0, 1)
-
-            recovered = inner_product(z)
-        
+            recovered = model(features, adj_norm)[0]     
+                  
 
             if args.eq:
                 intra_score = recovered[intra_link_pos[:, 0], intra_link_pos[:, 1]].mean()

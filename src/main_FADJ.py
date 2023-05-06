@@ -19,14 +19,12 @@ from torch_geometric.datasets import Planetoid
 import torch_geometric.transforms as T
 import numpy as np
 import copy
-import torch.nn as nn
 
 def main(args):
     # Data preparation
     G, adj, features, sensitive, test_edges_true, test_edges_false = get_dataset(args.dataset, args.scale,
                                                                                  args.test_ratio)
-    
-  
+
     n_nodes, feat_dim = features.shape
     features = torch.from_numpy(features).float().to(args.device)
     sensitive_save = sensitive.copy()
@@ -53,45 +51,14 @@ def main(args):
     bn_layer = torch.nn.BatchNorm1d(num_features=16).to(args.device)
     conv_big = torch.nn.Conv1d(in_channels=16, out_channels=16, kernel_size=13, stride=1, padding= 6).to(args.device)
     inner_product = InnerProductDecoder(args.dropout, act=lambda x: x).to(args.device)
-   
 ####################################################################################
     
-    dataset = "citeseer" #"cora" "pubmed"
-    path = osp.join(osp.dirname(osp.realpath('__file__')), "..", "data", dataset)
-    dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
-    data=dataset[0]
-    epochs=101
-    delta=0.05
-    Y = torch.LongTensor(sensitive).to(args.device)
-
-    inter=[]
-    intra=[]
-    
-    adj_norm = adj_norm.to_dense()
-    non_zero_indices = torch.nonzero(adj_norm)
-    i_indices, j_indices = non_zero_indices[:,0], non_zero_indices[:,1]
-
-    mask = Y[i_indices] == Y[j_indices]
-    intra = torch.stack((i_indices[mask], j_indices[mask]), dim=1)
-    inter = torch.stack((i_indices[~mask], j_indices[~mask]), dim=1)
-    adj_norm=adj_norm.to_sparse()
-
-    adj_copy_final=copy.deepcopy(adj_norm)
-    # num_edges is the number of c edges and intra edges
-    num_edges = intra.shape[0] + inter.shape[0]
-    print("num_edges",num_edges)
-    flattened_shape = num_edges*32
-    mlp = nn.Sequential(
-    nn.Linear(flattened_shape, num_edges),
-    nn.ReLU(),
-    nn.Linear(num_edges, num_edges)
-    ).to(args.device)
-
 ##########################################################################################
 
     # Training
     model.train()
     for i in range(args.outer_epochs):
+
         for epoch in range(args.T1):
             optimizer.zero_grad()
 
@@ -107,29 +74,9 @@ def main(args):
 
         for epoch in range(args.T2):
             adj_norm = adj_norm.requires_grad_(True)
-            recovered = model(features, adj_norm)[0]
-            z = model(features, adj_norm)[1]
+            recovered = model(features, adj_norm)[0]       
             
-            print("z.shape",z.shape)
-            print("recoverd.shape",recovered.shape)
-            # get edge indices by combining intra and inter edges
-            edge_indices = torch.cat((intra, inter), dim=0)
-            src_node_embeddings = z[edge_indices[:, 0], :]
-            dst_node_embeddings = z[edge_indices[:, 1], :]
-            edge_embeddings = torch.cat((src_node_embeddings, dst_node_embeddings), dim=1)
-            edge_embeddings = edge_embeddings.view(-1, flattened_shape)
-            edge_scores = mlp(edge_embeddings)
-            edge_scores = edge_scores.view(-1, 1)
-            # apply gumbel softmax
-            edge_scores = F.gumbel_softmax(edge_scores, tau=0.5, hard=True)
-            edge_scores = edge_scores.view(-1, 1)
-            # if edge_scores[i] < delta, remove the edge from recovered adjacency matrix    
-            for i in range(len(edge_scores)):
-                if edge_scores[i] < delta:
-                    recovered[edge_indices[i][0], edge_indices[i][1]] = 0
-                    recovered[edge_indices[i][1], edge_indices[i][0]] = 0
 
-                                   
             if args.eq:
                 intra_score = recovered[intra_link_pos[:, 0], intra_link_pos[:, 1]].mean()
                 inter_score = recovered[inter_link_pos[:, 0], inter_link_pos[:, 1]].mean()

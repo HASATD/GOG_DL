@@ -1,3 +1,9 @@
 # GOG_DL
 
-* Fair drop done
+* Fadj
+* edge removal
+* conv 
+* edge removal using edge embeddings and MLP
+* edge removal + conv
+* edge removal using MLP + conv
+
